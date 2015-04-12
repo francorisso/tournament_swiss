@@ -80,6 +80,7 @@ def testStandingsBeforeMatches():
 
 
 def testReportMatches():
+    tournament_id = 1
     deleteMatches()
     deletePlayers()
     registerPlayer("Bruno Walton")
@@ -88,8 +89,16 @@ def testReportMatches():
     registerPlayer("Diane Grant")
     standings = playerStandings()
     [id1, id2, id3, id4] = [row[0] for row in standings]
-    reportMatch(id1, id2)
-    reportMatch(id3, id4)
+    '''
+    This has been changed to accept matches by tournament
+    and tied games
+    '''
+    if reportMatch(tournament_id, id1, id2, -1)==False:
+        raise ValueError("Error adding match.")
+
+    if reportMatch(tournament_id, id3, id4, -1)==False:
+        raise ValueError("Error adding match.")
+
     standings = playerStandings()
     for (i, n, w, m) in standings:
         if m != 1:
@@ -102,6 +111,7 @@ def testReportMatches():
 
 
 def testPairings():
+    tournament_id = 1
     deleteMatches()
     deletePlayers()
     registerPlayer("Twilight Sparkle")
@@ -110,8 +120,8 @@ def testPairings():
     registerPlayer("Pinkie Pie")
     standings = playerStandings()
     [id1, id2, id3, id4] = [row[0] for row in standings]
-    reportMatch(id1, id2)
-    reportMatch(id3, id4)
+    reportMatch(tournament_id, id1, id2, -1)
+    reportMatch(tournament_id, id3, id4, -1)
     pairings = swissPairings()
     if len(pairings) != 2:
         raise ValueError(

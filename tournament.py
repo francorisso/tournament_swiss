@@ -61,26 +61,23 @@ def playerStandings():
     tied for first place if there is currently a tie.
 
     Returns:
-      A list of dictionaries with the fields:
+    A list of tuples, each of which contains (id, name, wins, matches):
         id: the player's unique id (assigned by the database)
         name: the player's full name (as registered)
-        won: the number of matches the player has won
-        lost: the number of matches the player has lost
-        tied: the number of matches the player has tied
+        wins: the number of matches the player has won
         matches: the number of matches the player has played
-        score: this score is won*3 + tied.
     """
     conn = connect()
     # use cursor_factory to get a dictionary
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('''
         SELECT
-            p.id, p.name,
-            mwon.total as won,
-            mlost.total as lost,
-            mtied.total as tied,
-            ( won + lost + tied) as matches,
-            ( won*3 + lost) as score,
+            p.id,
+            p.name,
+            COALESCE(mwon.total,0) as won,
+            COALESCE(mwon.total,0)
+            + COALESCE(mlost.total,0)
+            + COALESCE(mtied.total, 0) as matches
         FROM
             players p
         LEFT JOIN
@@ -92,22 +89,78 @@ def playerStandings():
         LEFT JOIN
             matches_tied mtied
             ON p.id = mtied.player_id
-        ORDER BY score DESC
+        ORDER BY won DESC
         ''')
-    results = conn.fetchall()
+    results = cursor.fetchall()
     conn.close()
 
     return results
 
 
-def reportMatch(winner, loser):
+def reportMatch(tournament_id, player1, player2, result):
     """Records the outcome of a single match between two players.
 
     Args:
-      winner:  the id number of the player who won
-      loser:  the id number of the player who lost
+      tournament_id: id of tournament
+      player1: id of player 1
+      player2: id of player 2
+      result: -1 means player1 win, 1 means player2 win, 0 means that was a tie
     """
+    conn = connect()
+    cursor = conn.cursor()
 
+    # create new match
+    cursor.execute('''
+        INSERT INTO
+            matches(tournament_id)
+        VALUES
+            (%(tournament_id)s)
+        RETURNING id;
+        ''',
+    { 'tournament_id' : tournament_id })
+    match_id = cursor.fetchone()[0]
+    if not match_id:
+        return False
+
+    # create the results for each player
+    if( result==0 ):
+        res_player1 = 'tied'
+        res_player2 = 'tied'
+    elif( result==-1 ):
+        res_player1 = 'won'
+        res_player2 = 'lost'
+    elif( result==-1 ):
+        res_player1 = 'lost'
+        res_player2 = 'won'
+    else:
+        return False
+
+    cursor.execute('''
+        INSERT INTO
+            matches_players(player_id, result)
+        VALUES
+            (%(player_id)s, %(result)s)
+        ''',
+    {
+        'player_id' : player1,
+        'result' : res_player1,
+    })
+
+    cursor.execute('''
+        INSERT INTO
+            matches_players(player_id, result)
+        VALUES
+            (%(player_id)s, %(result)s)
+        ''',
+    {
+        'player_id' : player2,
+        'result' : res_player2,
+    })
+
+    conn.commit()
+    conn.close()
+
+    return True
 
 def swissPairings():
     """Returns a list of pairs of players for the next round of a match.
@@ -124,5 +177,17 @@ def swissPairings():
         id2: the second player's unique id
         name2: the second player's name
     """
+    standings = playerStandings()
+    matches = []
+    nextMatch = None
+    for row in standings:
+        if nextMatch==None:
+            nextMatch = [row[0],row[1]]
+            continue
 
+        nextMatch.append(row[0])
+        nextMatch.append(row[1])
+        matches.append(nextMatch)
+        nextMatch = None
 
+    return matches

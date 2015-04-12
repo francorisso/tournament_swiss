@@ -21,16 +21,19 @@ create table tournaments(
 	name text not null
 );
 
+-- basic tournament --
+insert into tournaments(id,name) values (1, 'Udacity tour');
+
 drop table if exists matches cascade;
 create table matches(
 	id serial primary key,
-	tournament_id integer references tournaments(id)
+	tournament_id integer references tournaments(id) on delete cascade
 );
 
 drop table if exists matches_players cascade;
 create table matches_players(
-	match_id integer references matches(id),
-	player_id integer references players(id),
+	match_id integer references matches(id) on delete cascade,
+	player_id integer references players(id) on delete cascade,
 	result matchresult
 );
 CREATE INDEX matches_players_result ON matches_players(result);
