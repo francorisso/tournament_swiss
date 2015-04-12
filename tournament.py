@@ -4,7 +4,7 @@
 #
 
 import psycopg2
-
+import psycopg2.extras
 
 def connect():
     """Connect to the PostgreSQL database.  Returns a database connection."""
@@ -14,23 +14,29 @@ def connect():
 def deleteMatches():
     """Remove all the match records from the database."""
     conn = connect()
-    cursor = conn.execute('DELETE FROM matches')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM matches')
+    conn.commit()
     conn.close()
 
 def deletePlayers():
     """Remove all the player records from the database."""
     conn = connect()
-    cursor = conn.execute('DELETE FROM players')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM players')
+    conn.commit()
     conn.close()
 
 def countPlayers():
     """Returns the number of players currently registered."""
     conn = connect()
-    cursor = conn.execute('SELECT COUNT(*) as count FROM players')
-    res = cursor.find()
+    # use cursor_factory to get a dictionary
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT COUNT(players.id) as total FROM players')
+    res = cursor.fetchone()
     conn.close()
 
-    return res.count
+    return res['total']
 
 def registerPlayer(name):
     """Adds a player to the tournament database.
@@ -41,7 +47,12 @@ def registerPlayer(name):
     Args:
       name: the player's full name (need not be unique).
     """
-
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO players(name) VALUES (%(name)s)',
+        {'name':name})
+    conn.commit()
+    conn.close()
 
 def playerStandings():
     """Returns a list of the players and their win records, sorted by wins.
@@ -50,12 +61,43 @@ def playerStandings():
     tied for first place if there is currently a tie.
 
     Returns:
-      A list of tuples, each of which contains (id, name, wins, matches):
+      A list of dictionaries with the fields:
         id: the player's unique id (assigned by the database)
         name: the player's full name (as registered)
-        wins: the number of matches the player has won
+        won: the number of matches the player has won
+        lost: the number of matches the player has lost
+        tied: the number of matches the player has tied
         matches: the number of matches the player has played
+        score: this score is won*3 + tied.
     """
+    conn = connect()
+    # use cursor_factory to get a dictionary
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''
+        SELECT
+            p.id, p.name,
+            mwon.total as won,
+            mlost.total as lost,
+            mtied.total as tied,
+            ( won + lost + tied) as matches,
+            ( won*3 + lost) as score,
+        FROM
+            players p
+        LEFT JOIN
+            matches_won mwon
+            ON p.id = mwon.player_id
+        LEFT JOIN
+            matches_lost mlost
+            ON p.id = mlost.player_id
+        LEFT JOIN
+            matches_tied mtied
+            ON p.id = mtied.player_id
+        ORDER BY score DESC
+        ''')
+    results = conn.fetchall()
+    conn.close()
+
+    return results
 
 
 def reportMatch(winner, loser):

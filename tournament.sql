@@ -6,33 +6,53 @@
 -- You can write comments in this file by starting them with two dashes, like
 -- these lines here.
 
+DROP TYPE IF EXISTS matchresult;
+CREATE TYPE matchresult AS ENUM ('won', 'lost', 'tied');
 
+drop table if exists players cascade;
 create table players(
 	id serial primary key,
 	name text not null
 );
 
+drop table if exists tournaments cascade;
 create table tournaments(
 	id serial primary key,
 	name text not null
 );
 
+drop table if exists matches cascade;
 create table matches(
 	id serial primary key,
-	tournament_id integer references tournaments(id),
-	player1 integer references players(id),
-	player2 integer references players(id),
+	tournament_id integer references tournaments(id)
 );
 
-create table matches_results(
-	match_id integer primary key references matches(id),
-	winner integer references players(id)
+drop table if exists matches_players cascade;
+create table matches_players(
+	match_id integer references matches(id),
+	player_id integer references players(id),
+	result matchresult
 );
+CREATE INDEX matches_players_result ON matches_players(result);
 
--- view created to make queries about player wins easier
-create view players_wins as
-	select p.id, p.name, count(mr.match_id) as wins
-	from players as p
-	left join matches_results as mr
-		on p.id = mr.winner
-	group by p.id;
+-- views created to make queries easier
+drop view if exists matches_won;
+create view matches_won as
+	select player_id, COUNT(*) as total
+	from matches_players
+	where result = 'won'
+	group by player_id;
+
+drop view if exists matches_lost;
+create view matches_lost as
+	select player_id, COUNT(*) as total
+	from matches_players
+	where result = 'lost'
+	group by player_id;
+
+drop view if exists matches_tied;
+create view matches_tied as
+	select player_id, COUNT(*) as total
+	from matches_players
+	where result = 'tied'
+	group by player_id;
